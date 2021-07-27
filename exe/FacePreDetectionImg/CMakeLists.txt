@@ -1,0 +1,10 @@
+# Local libraries
+include_directories(${LandmarkDetector_SOURCE_DIR}/include)
+	
+add_executable(FacePreDetectionImg FacePreDetectionImg.cpp)
+target_link_libraries(FacePreDetectionImg LandmarkDetector)
+target_link_libraries(FacePreDetectionImg FaceAnalyser)
+target_link_libraries(FacePreDetectionImg GazeAnalyser)
+target_link_libraries(FacePreDetectionImg Utilities)
+
+install (TARGETS FacePreDetectionImg DESTINATION bin)

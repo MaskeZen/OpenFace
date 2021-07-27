@@ -1,0 +1,244 @@
+///////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2017, Tadas Baltrusaitis, all rights reserved.
+//
+// ACADEMIC OR NON-PROFIT ORGANIZATION NONCOMMERCIAL RESEARCH USE ONLY
+//
+// BY USING OR DOWNLOADING THE SOFTWARE, YOU ARE AGREEING TO THE TERMS OF THIS LICENSE AGREEMENT.  
+// IF YOU DO NOT AGREE WITH THESE TERMS, YOU MAY NOT USE OR DOWNLOAD THE SOFTWARE.
+//
+// License can be found in OpenFace-license.txt
+//
+//     * Any publications arising from the use of this software, including but
+//       not limited to academic journal and conference publications, technical
+//       reports and manuals, must cite at least one of the following works:
+//
+//       OpenFace 2.0: Facial Behavior Analysis Toolkit
+//       Tadas Baltrušaitis, Amir Zadeh, Yao Chong Lim, and Louis-Philippe Morency
+//       in IEEE International Conference on Automatic Face and Gesture Recognition, 2018  
+//
+//       Convolutional experts constrained local model for facial landmark detection.
+//       A. Zadeh, T. Baltrušaitis, and Louis-Philippe Morency,
+//       in Computer Vision and Pattern Recognition Workshops, 2017.    
+//
+//       Rendering of Eyes for Eye-Shape Registration and Gaze Estimation
+//       Erroll Wood, Tadas Baltrušaitis, Xucong Zhang, Yusuke Sugano, Peter Robinson, and Andreas Bulling 
+//       in IEEE International. Conference on Computer Vision (ICCV),  2015 
+//
+//       Cross-dataset learning and person-specific normalisation for automatic Action Unit detection
+//       Tadas Baltrušaitis, Marwa Mahmoud, and Peter Robinson 
+//       in Facial Expression Recognition and Analysis Challenge, 
+//       IEEE International Conference on Automatic Face and Gesture Recognition, 2015 
+//
+///////////////////////////////////////////////////////////////////////////////
+#include "stdafx_ut.h"
+
+#include "RecorderPreDetection.h"
+
+using namespace Utilities;
+
+#define WARN_STREAM( stream ) \
+std::cout << "Warning: " << stream << std::endl
+
+void CreateDirectory(std::string output_path)
+{
+	// Removing trailing separators, as that causes issues with directory creation in unix
+	while (output_path[output_path.size() - 1] == '/' || output_path[output_path.size() - 1] == '\\')
+	{
+		output_path = output_path.substr(0, output_path.size() - 1);
+	}
+
+	// Creating the right directory structure	
+	if (!fs::exists(output_path))
+	{
+		bool success = fs::create_directories(output_path);
+
+		if (!success)
+		{
+			std::cout << "ERROR: failed to create output directory:" << output_path << ", do you have permission to create directory" << std::endl;
+			exit(1);
+		}
+	}
+}
+
+void RecorderPreDetection::AlignedImageWritingTask()
+{
+
+	std::pair<std::string, cv::Mat> tracked_data;
+
+	while (true)
+	{
+		aligned_face_queue.pop(tracked_data);
+
+		// Empty frame indicates termination
+		if (tracked_data.second.empty())
+			break;
+
+		bool write_success = cv::imwrite(tracked_data.first, tracked_data.second);
+
+		if (!write_success)
+		{
+			WARN_STREAM("Could not output similarity aligned image image");
+		}
+	}
+}
+
+void RecorderPreDetection::PrepareRecording(const std::string& in_filename)
+{
+
+	// Construct the directories required for the output
+	CreateDirectory(record_root);
+	// Create the filename for the general output file that contains all of the meta information about the recording
+	fs::path of_det_name(out_name);
+
+	// Prepare image recording
+	if (params.outputAlignedFaces())
+	{
+		aligned_output_directory = out_name + "_aligned";
+		this->aligned_output_directory = (fs::path(record_root) / this->aligned_output_directory).string();
+		CreateDirectory(aligned_output_directory);		
+	}
+	this->aligned_writing_thread_started = false;
+}
+
+RecorderPreDetection::RecorderPreDetection(const std::string in_filename, const RecorderOpenFaceParameters& parameters, std::vector<std::string>& arguments):video_writer(), params(parameters)
+{
+
+	// From the filename, strip out the name without directory and extension
+	if (fs::is_directory(in_filename))
+	{
+		out_name = fs::canonical(in_filename).filename().string();
+	}
+	else
+	{
+		out_name = fs::path(in_filename).filename().replace_extension("").string();
+	}
+
+	// Consuming the input arguments
+	bool* valid = new bool[arguments.size()];
+
+	for (size_t i = 0; i < arguments.size(); ++i)
+	{
+		valid[i] = true;
+	}
+
+	for (size_t i = 0; i < arguments.size(); ++i)
+	{
+		if (arguments[i].compare("-out_dir") == 0)
+		{
+			record_root = arguments[i + 1];
+		}
+	}
+
+	// Determine output directory
+	bool output_found = false;
+	for (size_t i = 0; i < arguments.size(); ++i)
+	{
+		if (!output_found && arguments[i].compare("-of") == 0)
+		{
+			record_root = (fs::path(record_root) / fs::path(arguments[i + 1])).remove_filename().string();
+			out_name = fs::path(fs::path(arguments[i + 1])).replace_extension("").filename().string();
+			valid[i] = false;
+			valid[i + 1] = false;
+			i++;
+			output_found = true;
+		}
+	}
+
+	// If recording directory not set, record to default location
+	if (record_root.empty())
+		record_root = default_record_directory;
+
+	for (int i = (int)arguments.size() - 1; i >= 0; --i)
+	{
+		if (!valid[i])
+		{
+			arguments.erase(arguments.begin() + i);
+		}
+	}
+
+	PrepareRecording(in_filename);
+
+}
+
+RecorderPreDetection::RecorderPreDetection(const std::string in_filename, const RecorderOpenFaceParameters& parameters, std::string output_directory):video_writer(), params(parameters)
+{
+	// From the filename, strip out the name without directory and extension
+	if (fs::is_directory(in_filename))
+	{
+		out_name = fs::canonical(fs::path(in_filename)).filename().string();
+	}
+	else
+	{
+		out_name = fs::path(in_filename).filename().replace_extension("").string();
+	}
+
+	record_root = output_directory;
+
+	// If recording directory not set, record to default location
+	if (record_root.empty())
+		record_root = default_record_directory;
+
+	PrepareRecording(in_filename);
+}
+
+
+void RecorderPreDetection::SetObservationFaceAlign(const cv::Mat& aligned_face)
+{
+	this->aligned_face = aligned_face;
+}
+
+void RecorderPreDetection::WriteObservation()
+{
+    if (!aligned_writing_thread_started)
+    {
+        aligned_writing_thread_started = true;
+        int capacity = (1024 * 1024 * ALIGNED_QUEUE_CAPACITY) / (aligned_face.size().width *aligned_face.size().height * aligned_face.channels()) + 1;
+        aligned_face_queue.set_capacity(capacity);
+
+        // Start the alignment output thread			
+        aligned_writing_thread = std::thread(&RecorderPreDetection::AlignedImageWritingTask, this);
+    }
+
+    char name[100];
+
+    // Filename is based on frame number (TODO stringstream this)
+    if(params.isSequence())
+        std::sprintf(name, "frame_det_%02d_%06d.", face_id, frame_number);
+    else
+        std::sprintf(name, "face_det_%06d.", face_id);
+
+    // Construct the output filename
+    std::string out_file = (fs::path(aligned_output_directory) / fs::path(std::string(name) + params.imageFormatAligned())).string();
+
+    if(params.outputBadAligned() || landmark_detection_success)
+    {
+        aligned_face_queue.push(std::pair<std::string, cv::Mat>(out_file, aligned_face));
+    }
+
+    // Clear the image
+    aligned_face = cv::Mat();
+}
+
+void RecorderPreDetection::Close()
+{
+	// Insert terminating frames to the queues
+	vis_to_out_queue.push(std::pair<std::string, cv::Mat>("", cv::Mat()));
+	aligned_face_queue.push(std::pair<std::string, cv::Mat>("", cv::Mat()));
+
+	// Make sure the recording threads complete
+	if (video_writing_thread.joinable())
+		video_writing_thread.join();
+	if (aligned_writing_thread.joinable())
+		aligned_writing_thread.join();
+
+	tracked_writing_thread_started = false;
+	aligned_writing_thread_started = false;
+
+	hog_recorder.Close();
+	csv_recorder.Close();
+	video_writer.release();
+	metadata_file.close();
+}
+
+
+
