@@ -47,6 +47,8 @@
 #include <RecorderOpenFace.h>
 #include <RecorderOpenFaceParameters.h>
 
+#include <RecorderPreDetection.h>
+
 
 #ifndef CONFIG_DIR
 #define CONFIG_DIR "~"
@@ -148,7 +150,8 @@ int main(int argc, char **argv)
 		{
 			recording_params.setOutputGaze(false);
 		}
-		Utilities::RecorderOpenFace open_face_rec(image_reader.name, recording_params, arguments);
+		// Utilities::RecorderOpenFace open_face_rec(image_reader.name, recording_params, arguments);
+		Utilities::RecorderPreDetection recorder_pre_detection(image_reader.name, recording_params, arguments);
 
 		visualizer.SetImage(rgb_image, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
@@ -192,48 +195,6 @@ int main(int argc, char **argv)
 			// Estimate head pose and eye gaze				
 			cv::Vec6d pose_estimate = LandmarkDetector::GetPose(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
-			// Gaze tracking, absolute gaze direction
-			// cv::Point3f gaze_direction0(0, 0, -1);
-			// cv::Point3f gaze_direction1(0, 0, -1);
-			// cv::Vec2f gaze_angle(0, 0);
-
-			// if (face_model.eye_model)
-			// {
-			// 	GazeAnalysis::EstimateGaze(face_model, gaze_direction0, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy, true);
-			// 	GazeAnalysis::EstimateGaze(face_model, gaze_direction1, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy, false);
-			// 	gaze_angle = GazeAnalysis::GetGazeAngle(gaze_direction0, gaze_direction1);
-			// }
-
-			// cv::Mat sim_warped_img;
-			// cv::Mat_<double> hog_descriptor; int num_hog_rows = 0, num_hog_cols = 0;
-
-			// // Perform AU detection and HOG feature extraction, as this can be expensive only compute it if needed by output or visualization
-			// if (recording_params.outputAlignedFaces() || recording_params.outputHOG() || recording_params.outputAUs() || visualizer.vis_align || visualizer.vis_hog)
-			// {
-			// 	face_analyser.PredictStaticAUsAndComputeFeatures(rgb_image, face_model.detected_landmarks);
-			// 	face_analyser.GetLatestAlignedFace(sim_warped_img);
-			// 	face_analyser.GetLatestHOG(hog_descriptor, num_hog_rows, num_hog_cols);
-			// }
-
-			// Displaying the tracking visualizations
-			// visualizer.SetObservationFaceAlign(sim_warped_img);
-			// visualizer.SetObservationHOG(hog_descriptor, num_hog_rows, num_hog_cols);
-			// visualizer.SetObservationLandmarks(face_model.detected_landmarks, 1.0, face_model.GetVisibilities()); // Set confidence to high to make sure we always visualize
-			// visualizer.SetObservationPose(pose_estimate, 1.0);
-			// visualizer.SetObservationGaze(gaze_direction0, gaze_direction1, LandmarkDetector::CalculateAllEyeLandmarks(face_model), LandmarkDetector::Calculate3DEyeLandmarks(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy), face_model.detection_certainty);
-			// visualizer.SetObservationActionUnits(face_analyser.GetCurrentAUsReg(), face_analyser.GetCurrentAUsClass());
-
-			// Setting up the recorder output
-			// open_face_rec.SetObservationHOG(face_model.detection_success, hog_descriptor, num_hog_rows, num_hog_cols, 31); // The number of channels in HOG is fixed at the moment, as using FHOG
-			// open_face_rec.SetObservationActionUnits(face_analyser.GetCurrentAUsReg(), face_analyser.GetCurrentAUsClass());
-			// open_face_rec.SetObservationLandmarks(face_model.detected_landmarks, face_model.GetShape(image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy),
-			//  	face_model.params_global, face_model.params_local, face_model.detection_certainty, face_model.detection_success);
-			// open_face_rec.SetObservationPose(pose_estimate);
-			// open_face_rec.SetObservationGaze(gaze_direction0, gaze_direction1, gaze_angle, LandmarkDetector::CalculateAllEyeLandmarks(face_model), LandmarkDetector::Calculate3DEyeLandmarks(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy));
-			// open_face_rec.SetObservationFaceAlign(sim_warped_img);
-			// open_face_rec.SetObservationFaceID(face);
-			// open_face_rec.WriteObservation();
-
 			std::cout << "SE IMPRIME CONFIDENCE" << std::endl;
 			std::cout << std::setprecision(3);
 			std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
@@ -249,18 +210,20 @@ int main(int argc, char **argv)
 			face_analyser.GetLatestAlignedFace(sim_warped_img);
 
 			visualizer.SetObservationFaceAlign(sim_warped_img);
-			open_face_rec.SetObservationFaceAlign(sim_warped_img);
-			open_face_rec.WriteObservation();
+
+			recorder_pre_detection.SetObservationFaceAlign(sim_warped_img);
+			recorder_pre_detection.WriteFaceAlign();
+			recorder_pre_detection.Close();
 		}
 		if (face_detections.size() > 0)
 		{
 			visualizer.ShowObservation();
 		}
 
-		open_face_rec.SetObservationVisualization(visualizer.GetVisImage());
-		open_face_rec.WriteObservationTracked();
+		// open_face_rec.SetObservationVisualization(visualizer.GetVisImage());
+		// open_face_rec.WriteObservationTracked();
 
-		open_face_rec.Close();
+		// open_face_rec.Close();
 
 		// Grabbing the next frame in the sequence
 		rgb_image = image_reader.GetNextImage();

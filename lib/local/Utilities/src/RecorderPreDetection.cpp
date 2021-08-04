@@ -187,7 +187,7 @@ void RecorderPreDetection::SetObservationFaceAlign(const cv::Mat& aligned_face)
 	this->aligned_face = aligned_face;
 }
 
-void RecorderPreDetection::WriteObservation()
+void RecorderPreDetection::WriteFaceAlign()
 {
     if (!aligned_writing_thread_started)
     {
@@ -217,6 +217,11 @@ void RecorderPreDetection::WriteObservation()
 
     // Clear the image
     aligned_face = cv::Mat();
+}
+
+RecorderPreDetection::~RecorderPreDetection()
+{
+	this->Close();
 }
 
 void RecorderPreDetection::Close()

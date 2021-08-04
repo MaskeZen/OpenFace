@@ -3,6 +3,7 @@ SET(SOURCE
 	src/RecorderCSV.cpp
     src/RecorderHOG.cpp
 	src/RecorderOpenFace.cpp
+	src/RecorderPreDetection.cpp
     src/RecorderOpenFaceParameters.cpp
 	src/SequenceCapture.cpp
 	src/stdafx_ut.cpp
@@ -15,6 +16,7 @@ SET(HEADERS
     include/RecorderCSV.h
 	include/RecorderHOG.h
     include/RecorderOpenFace.h
+    include/RecorderPreDetection.h
 	include/RecorderOpenFaceParameters.h
 	include/SequenceCapture.h
 	include/stdafx_ut.h
