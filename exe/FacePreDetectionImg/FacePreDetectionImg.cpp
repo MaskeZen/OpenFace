@@ -66,6 +66,8 @@ std::vector<std::string> get_arguments(int argc, char **argv)
 	return arguments;
 }
 
+float radianToDegrees(float radian);
+
 int main(int argc, char **argv)
 {
 
@@ -200,9 +202,11 @@ int main(int argc, char **argv)
 			std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
 
 			std::cout << "SE IMPRIME POSE ESTIMATE" << std::endl;
+			std::cout << pose_estimate[0] << "|" << pose_estimate[1] << "|" << pose_estimate[2] << std::endl;
+			std::cout << "Pitch, Yaw y Roll" << std::endl;
 
 			std::cout << std::setprecision(3);
-			std::cout << pose_estimate[3] << "," << pose_estimate[4] << "," << pose_estimate[5] << std::endl;
+			std::cout << radianToDegrees(pose_estimate[3]) << "," << radianToDegrees(pose_estimate[4]) << "," << radianToDegrees(pose_estimate[5]) << std::endl;
 
 			cv::Mat sim_warped_img;
 
@@ -233,3 +237,6 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+float radianToDegrees(float radian) {
+	return radian * (180.0f / 3.14159265f);
+}
