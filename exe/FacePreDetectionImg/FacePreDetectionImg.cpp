@@ -197,16 +197,23 @@ int main(int argc, char **argv)
 			// Estimate head pose and eye gaze				
 			cv::Vec6d pose_estimate = LandmarkDetector::GetPose(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
-			std::cout << "SE IMPRIME CONFIDENCE" << std::endl;
+			// std::cout << " ================ " << image_reader.name << " ================ " << std::endl;
 			std::cout << std::setprecision(3);
-			std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
+			// std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
+			std::cout << image_reader.name << face_model.detection_certainty << "," << radianToDegrees(pose_estimate[3]) << "," << radianToDegrees(pose_estimate[4]) << "," << radianToDegrees(pose_estimate[5]) << std::endl;
 
-			std::cout << "SE IMPRIME POSE ESTIMATE" << std::endl;
-			std::cout << pose_estimate[0] << "|" << pose_estimate[1] << "|" << pose_estimate[2] << std::endl;
-			std::cout << "Pitch, Yaw y Roll" << std::endl;
+			// std::cout << "SE IMPRIME POSE ESTIMATE" << std::endl;
+			// std::cout << pose_estimate[0] << "|" << pose_estimate[1] << "|" << pose_estimate[2] << std::endl;
+			// std::cout << "Pitch, Yaw y Roll" << std::endl;
 
-			std::cout << std::setprecision(3);
-			std::cout << radianToDegrees(pose_estimate[3]) << "," << radianToDegrees(pose_estimate[4]) << "," << radianToDegrees(pose_estimate[5]) << std::endl;
+			// int yaw = (int)(pose_estimate[4] * 180 / 3.1415926 + 0.5);
+            // int roll = (int)(pose_estimate[5] * 180 / 3.1415926 + 0.5);
+			// int pitch = (int)(pose_estimate[3] * 180 /3.1415926 + 0.5);
+			// std::cout<<"pitch:\t"<<"yaw:\t"<<"roll:"<< std::endl;
+			// std::cout<<pitch<<"\t"<<yaw<<"\t"<<roll<< std::endl;
+
+			// std::cout << std::setprecision(3);
+			// std::cout << radianToDegrees(pose_estimate[3]) << "," << radianToDegrees(pose_estimate[4]) << "," << radianToDegrees(pose_estimate[5]) << std::endl;
 
 			cv::Mat sim_warped_img;
 
