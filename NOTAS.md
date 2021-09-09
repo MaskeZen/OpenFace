@@ -31,3 +31,7 @@ Ejemplos
 - [Ejemplo de daemon 1](https://github.com/jirihnidek/daemon)
 - [Ejemplo de daemon 2](https://gist.github.com/alexdlaird/3100f8c7c96871c5b94e)
 - [Ejemplo de daemon 3](https://gist.github.com/faberyx/b07d146e11efbad1643f3e8ba6f1a475)
+
+### IPC
+
+- [Shared memory](https://www.boost.org/doc/libs/1_77_0/doc/html/interprocess/sharedmemorybetweenprocesses.html)

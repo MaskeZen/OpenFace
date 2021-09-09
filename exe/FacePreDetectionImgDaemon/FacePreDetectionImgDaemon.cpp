@@ -49,6 +49,13 @@
 
 #include <RecorderPreDetection.h>
 
+#include <chrono>
+#include <iostream>
+#include <thread>
+
+#include "command-line-parser.hpp"
+#include "daemon.hpp"
+#include "log.hpp"
 
 #ifndef CONFIG_DIR
 #define CONFIG_DIR "~"
@@ -75,6 +82,10 @@ LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn;
 Utilities::Visualizer visualizer;
 LandmarkDetector::FaceModelParameters det_parameters;
 FaceAnalysis::FaceAnalyser face_analyser;
+
+void reload() {
+    LOG_INFO("Reload function called.");
+}
 
 int main(int argc, char **argv)
 {
@@ -116,7 +127,17 @@ int main(int argc, char **argv)
 	// A utility for visualizing the results
 	visualizer = * new Utilities::Visualizer(arguments);
 	
+	Daemon& daemon = Daemon::instance();
+    // señal SIGHUP
+    daemon.setReloadFunction(reload);
+	int count = 0;
+    while (daemon.IsRunning()) {
+        LOG_DEBUG("Count: ", count++);
+		count++;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 
+    LOG_INFO("FacePreDetectionImgDaemon finalizó satisfactoriamente.");
 	return 0;
 }
 
@@ -230,6 +251,6 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 		rgb_image = image_reader.GetNextImage();
 
 	}
-	
+
 	return 0;
 }
