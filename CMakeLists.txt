@@ -243,6 +243,7 @@ endif()
 # executables
 add_subdirectory(exe/FaceLandmarkImg)
 add_subdirectory(exe/FacePreDetectionImg)
+add_subdirectory(exe/FacePreDetectionImgDaemon)
 add_subdirectory(exe/FaceLandmarkVid)
 add_subdirectory(exe/FaceLandmarkVidMulti)
 add_subdirectory(exe/FeatureExtraction)

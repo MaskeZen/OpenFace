@@ -31,7 +31,7 @@
 //       IEEE International Conference on Automatic Face and Gesture Recognition, 2015 
 //
 ///////////////////////////////////////////////////////////////////////////////
-// FacePreDetectionImg.cpp
+// FacePreDetectionImgDaemon.cpp
 
 // dlib
 #include <dlib/image_processing/frontal_face_detector.h>
@@ -68,32 +68,21 @@ std::vector<std::string> get_arguments(int argc, char **argv)
 
 float radianToDegrees(float radian);
 
+int processImage(std::vector<std::string>, LandmarkDetector::CLNF);
+
+LandmarkDetector::CLNF face_model;
+LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn;
+Utilities::Visualizer visualizer;
+LandmarkDetector::FaceModelParameters det_parameters;
+FaceAnalysis::FaceAnalyser face_analyser;
+
 int main(int argc, char **argv)
 {
-
 	//Convert arguments to more convenient vector form
 	std::vector<std::string> arguments = get_arguments(argc, argv);
 
-	// no arguments: output usage
-	if (arguments.size() == 1)
-	{
-		std::cout << "For command line arguments see:" << std::endl;
-		std::cout << " https://github.com/TadasBaltrusaitis/OpenFace/wiki/Command-line-arguments";
-		return 0;
-	}
-
-	// Prepare for image reading
-	Utilities::ImageCapture image_reader;
-
-	// The sequence reader chooses what to open based on command line arguments provided
-	if (!image_reader.Open(arguments))
-	{
-		std::cout << "Could not open any images" << std::endl;
-		return 1;
-	}
-
 	// Load the models if images found
-	LandmarkDetector::FaceModelParameters det_parameters(arguments);
+	det_parameters = * new LandmarkDetector::FaceModelParameters(arguments);
 
 	// The modules that are being used for tracking
 	std::cout << "Loading the model" << std::endl;
@@ -110,12 +99,12 @@ int main(int argc, char **argv)
 	// Load facial feature extractor and AU analyser (make sure it is static)
 	FaceAnalysis::FaceAnalyserParameters face_analysis_params(arguments);
 	face_analysis_params.OptimizeForImages();
-	FaceAnalysis::FaceAnalyser face_analyser(face_analysis_params);
+	face_analyser = * new FaceAnalysis::FaceAnalyser(face_analysis_params);
 
 	// If bounding boxes not provided, use a face detector
 	cv::CascadeClassifier classifier(det_parameters.haar_face_detector_location);
 	dlib::frontal_face_detector face_detector_hog = dlib::get_frontal_face_detector();
-	LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn(det_parameters.mtcnn_face_detector_location);
+	face_detector_mtcnn = * new LandmarkDetector::FaceDetectorMTCNN(det_parameters.mtcnn_face_detector_location);
 
 	// If can't find MTCNN face detector, default to HOG one
 	if (det_parameters.curr_face_detector == LandmarkDetector::FaceModelParameters::MTCNN_DETECTOR && face_detector_mtcnn.empty())
@@ -125,8 +114,27 @@ int main(int argc, char **argv)
 	}
 
 	// A utility for visualizing the results
-	Utilities::Visualizer visualizer(arguments);
+	visualizer = * new Utilities::Visualizer(arguments);
 	
+
+	return 0;
+}
+
+float radianToDegrees(float radian) {
+	return radian * (180.0f / 3.14159265f);
+}
+
+int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face_model) {
+	// Prepare for image reading
+	Utilities::ImageCapture image_reader;
+
+	// The sequence reader chooses what to open based on command line arguments provided
+	if (!image_reader.Open(arguments))
+	{
+		std::cout << "Could not open any images" << std::endl;
+		return 1;
+	}
+
 	cv::Mat rgb_image;
 
 	rgb_image = image_reader.GetNextImage();
@@ -163,31 +171,9 @@ int main(int argc, char **argv)
 		// Detect faces in an image
 		std::vector<cv::Rect_<float> > face_detections;
 
-		if (image_reader.has_bounding_boxes)
-		{
-			std::cout << "image_reader.has_bounding_boxes";
-			face_detections = image_reader.GetBoundingBoxes();
-		}
-		else
-		{
-			if (det_parameters.curr_face_detector == LandmarkDetector::FaceModelParameters::HOG_SVM_DETECTOR)
-			{
-				std::cout << " ++++ FACE DETECTOR: LandmarkDetector::FaceModelParameters::HOG_SVM_DETECTOR";
-				std::vector<float> confidences;
-				LandmarkDetector::DetectFacesHOG(face_detections, grayscale_image, face_detector_hog, confidences);
-			}
-			else if (det_parameters.curr_face_detector == LandmarkDetector::FaceModelParameters::HAAR_DETECTOR)
-			{
-				std::cout << " ++++ FACE DETECTOR: LandmarkDetector::FaceModelParameters::HAAR_DETECTOR";
-				LandmarkDetector::DetectFaces(face_detections, grayscale_image, classifier);
-			}
-			else
-			{
-				std::cout << " ++++ FACE DETECTOR: else... DetectFacesMTCNN";
-				std::vector<float> confidences;
-				LandmarkDetector::DetectFacesMTCNN(face_detections, rgb_image, face_detector_mtcnn, confidences);
-			}
-		}
+		std::vector<float> confidences;
+		LandmarkDetector::DetectFacesMTCNN(face_detections, rgb_image, face_detector_mtcnn, confidences);
+			
 
 		// Detect landmarks around detected faces
 		int face_det = 0;
@@ -244,10 +230,6 @@ int main(int argc, char **argv)
 		rgb_image = image_reader.GetNextImage();
 
 	}
-
+	
 	return 0;
-}
-
-float radianToDegrees(float radian) {
-	return radian * (180.0f / 3.14159265f);
 }

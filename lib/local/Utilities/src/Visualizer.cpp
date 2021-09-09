@@ -65,6 +65,10 @@ const std::map<std::string, std::string> AUS_DESCRIPTION = {
 
 };
 
+Visualizer::Visualizer() {
+	
+}
+
 Visualizer::Visualizer(std::vector<std::string> arguments)
 {
 	// By default not visualizing anything

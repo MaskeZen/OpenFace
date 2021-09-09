@@ -19,6 +19,9 @@ Ejemplos
 - [camera-rotation-in-world-coordinates](https://blender.stackexchange.com/questions/134770/camera-rotation-in-world-coordinates)
 - [What is the world coordinate? #89](https://github.com/TadasBaltrusaitis/OpenFace/issues/89)
 
+- [Modelos](https://towardsdatascience.com/face-detection-models-which-to-use-and-why-d263e82c302c)
+  Se puede elegir el modelo a utilizar para detectar los rostros, por defecto utilizará MTCNN, tal vez se pueda cambiar por otro más eficiente.
+
 ### Instalación
 
 - [opencv instalación](https://docs.opencv.org/master/d7/d9f/tutorial_linux_install.html)
