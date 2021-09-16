@@ -49,6 +49,7 @@
 
 #include <RecorderPreDetection.h>
 
+// daemon -------------
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -57,21 +58,15 @@
 #include "daemon.hpp"
 #include "log.hpp"
 
+// IPC -------------
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
 #ifndef CONFIG_DIR
 #define CONFIG_DIR "~"
 #endif
 
-std::vector<std::string> get_arguments(int argc, char **argv)
-{
-
-	std::vector<std::string> arguments;
-
-	for (int i = 0; i < argc; ++i)
-	{
-		arguments.push_back(std::string(argv[i]));
-	}
-	return arguments;
-}
+std::vector<std::string> get_arguments(int argc, char **argv);
 
 float radianToDegrees(float radian);
 
@@ -83,9 +78,7 @@ Utilities::Visualizer visualizer;
 LandmarkDetector::FaceModelParameters det_parameters;
 FaceAnalysis::FaceAnalyser face_analyser;
 
-void reload() {
-    LOG_INFO("Reload function called.");
-}
+void reload();
 
 int main(int argc, char **argv)
 {
@@ -131,12 +124,25 @@ int main(int argc, char **argv)
     // señal SIGHUP
     daemon.setReloadFunction(reload);
 	int count = 0;
+
+	// se genera una clave única
+    // key_t key = ftok("shmfile",65);
+	key_t key = 411360;
+    // identificador del espacio de memoria
+    int shmid = shmget(key,1024,0666|IPC_CREAT);
     while (daemon.IsRunning()) {
+		// Se lee de la memoria compartida
+		std::string str = (std::string*) shmat(shmid,(void*)0,0);
+		printf("Información en memoria: %s\n",str);
+
+		str = "";
+		// Se libera la memoria compartida
+    	shmdt(str);
         LOG_DEBUG("Count: ", count++);
-		count++;
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-
+    // Se destruye la memoria compartida
+    shmctl(shmid,IPC_RMID,NULL);
     LOG_INFO("FacePreDetectionImgDaemon finalizó satisfactoriamente.");
 	return 0;
 }
@@ -253,4 +259,22 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 	}
 
 	return 0;
+}
+
+std::vector<std::string> get_arguments(int argc, char **argv)
+{
+
+	std::vector<std::string> arguments;
+
+	for (int i = 0; i < argc; ++i)
+	{
+		arguments.push_back(std::string(argv[i]));
+	}
+	return arguments;
+}
+
+// Se ejecutará
+// cuando se envie la señal HUP
+void reload() {
+    LOG_INFO("Se recarga el demonio.");
 }

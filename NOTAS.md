@@ -35,3 +35,4 @@ Ejemplos
 ### IPC
 
 - [Shared memory](https://www.boost.org/doc/libs/1_77_0/doc/html/interprocess/sharedmemorybetweenprocesses.html)
+- [mmap](http://users.cs.cf.ac.uk/Dave.Marshall/C/node27.html)
