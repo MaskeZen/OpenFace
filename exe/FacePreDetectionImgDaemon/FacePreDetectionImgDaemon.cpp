@@ -132,11 +132,27 @@ int main(int argc, char **argv)
     int shmid = shmget(key,1024,0666|IPC_CREAT);
     while (daemon.IsRunning()) {
 		// Se lee de la memoria compartida
-		std::string str = (std::string*) shmat(shmid,(void*)0,0);
+		char* str = (char*) shmat(shmid,(void*)0,0);
 		printf("Información en memoria: %s\n",str);
+		
+		std::string valor(str);
+		valor.erase(std::remove(valor.begin(), valor.end(), '\n'), valor.end());
+		LOG_INFO(valor);
+		
+		if (valor != "") {
+			arguments.push_back("-fdir");
+			arguments.push_back(valor);
+			int returnValue = processImage(arguments, face_model);
+			if (returnValue != 0) {
+				LOG_ERROR("ERROR: Could not process image");
+			} else {
+				LOG_INFO("INFO: Image processed");
+			}
+			arguments.clear();
+		}
 
-		str = "";
 		// Se libera la memoria compartida
+		*str = NULL; // <-- TODO: Modificar (Warning: converting to non-pointer type ‘char’ from NULL [-Wconversion-null]GCC)
     	shmdt(str);
         LOG_DEBUG("Count: ", count++);
         std::this_thread::sleep_for(std::chrono::seconds(1));
