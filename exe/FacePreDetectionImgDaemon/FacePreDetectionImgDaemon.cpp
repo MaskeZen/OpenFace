@@ -80,6 +80,12 @@ FaceAnalysis::FaceAnalyser face_analyser;
 
 void reload();
 
+struct procesar_solicitud 
+{
+    char operacion[64];
+    char archivo[255];
+};
+
 int main(int argc, char **argv)
 {
 	//Convert arguments to more convenient vector form
@@ -129,19 +135,29 @@ int main(int argc, char **argv)
     // key_t key = ftok("shmfile",65);
 	key_t key = 411360;
     // identificador del espacio de memoria
-    int shmid = shmget(key,1024,0666|IPC_CREAT);
+    int shmid = shmget(key, sizeof(struct procesar_solicitud),0666|IPC_CREAT);
+	struct procesar_solicitud* datos_solicitud;
     while (daemon.IsRunning()) {
 		// Se lee de la memoria compartida
-		char* str = (char*) shmat(shmid,(void*)0,0);
-		printf("Información en memoria: %s\n",str);
+		char* shared_memory_addr = (char*) shmat(shmid,(void*)0,0);
+		if (shared_memory_addr == (char*)-1) {
+			std::cout << "ERROR: Could not attach to shared memory" << std::endl;
+			return 1;
+		}
 		
-		std::string valor(str);
-		valor.erase(std::remove(valor.begin(), valor.end(), '\n'), valor.end());
-		LOG_INFO(valor);
+		datos_solicitud = (struct procesar_solicitud*)malloc(sizeof(struct procesar_solicitud)*1);
+		memcpy(datos_solicitud, shared_memory_addr, sizeof(struct procesar_solicitud));
+				
+		std::string operacion(datos_solicitud->operacion);
+		std::string archivo(datos_solicitud->archivo);
+		operacion.erase(std::remove(operacion.begin(), operacion.end(), '\n'), operacion.end());
+		LOG_INFO(operacion);
+		archivo.erase(std::remove(archivo.begin(), archivo.end(), '\n'), archivo.end());
+		LOG_INFO(archivo);
 		
-		if (valor != "") {
-			arguments.push_back("-fdir");
-			arguments.push_back(valor);
+		if (!operacion.empty() && archivo != "") {
+			arguments.push_back(operacion);
+			arguments.push_back(archivo);
 			int returnValue = processImage(arguments, face_model);
 			if (returnValue != 0) {
 				LOG_ERROR("ERROR: Could not process image");
@@ -152,8 +168,8 @@ int main(int argc, char **argv)
 		}
 
 		// Se libera la memoria compartida
-		*str = NULL; // <-- TODO: Modificar (Warning: converting to non-pointer type ‘char’ from NULL [-Wconversion-null]GCC)
-    	shmdt(str);
+		*shared_memory_addr = '\0';
+    	shmdt(shared_memory_addr);
         LOG_DEBUG("Count: ", count++);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
