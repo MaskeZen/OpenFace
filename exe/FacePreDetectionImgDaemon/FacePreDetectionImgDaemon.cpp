@@ -60,7 +60,11 @@
 
 // IPC -------------
 #include <sys/ipc.h>
+// shared memory
 #include <sys/shm.h>
+// queues
+#include <sys/msg.h>
+// IPC -------------
 
 #ifndef CONFIG_DIR
 #define CONFIG_DIR "~"
@@ -84,6 +88,18 @@ struct procesar_solicitud
 {
     char operacion[64];
     char archivo[255];
+};
+
+struct face_data {
+	long mesg_type = 1;
+    float yaw;
+    float pitch;
+    float roll;
+	float detection_certainty;
+	// std::string image_name;
+	bool fin = false;
+    // char* image;
+    // cv::Mat rgb_image;
 };
 
 int main(int argc, char **argv)
@@ -139,36 +155,49 @@ int main(int argc, char **argv)
 	struct procesar_solicitud* datos_solicitud;
     while (daemon.IsRunning()) {
 		// Se lee de la memoria compartida
-		char* shared_memory_addr = (char*) shmat(shmid,(void*)0,0);
-		if (shared_memory_addr == (char*)-1) {
+		procesar_solicitud* shared_memory_addr = (procesar_solicitud*) shmat(shmid,(void*)0,0);
+		if (shared_memory_addr == (void*)-1) {
 			std::cout << "ERROR: Could not attach to shared memory" << std::endl;
-			return 1;
+		 	return 1;
 		}
+		// if (*shared_memory_addr == (char*)-1) {
+		// 	std::cout << "ERROR: Could not attach to shared memory" << std::endl;
+		// 	return 1;
+		// }
 		
-		datos_solicitud = (struct procesar_solicitud*)malloc(sizeof(struct procesar_solicitud)*1);
-		memcpy(datos_solicitud, shared_memory_addr, sizeof(struct procesar_solicitud));
+		// datos_solicitud = new procesar_solicitud;
+		// memcpy(datos_solicitud, shared_memory_addr, sizeof(struct procesar_solicitud));
 				
-		std::string operacion(datos_solicitud->operacion);
-		std::string archivo(datos_solicitud->archivo);
+		std::string operacion(shared_memory_addr->operacion);
+		std::string archivo(shared_memory_addr->archivo);
 		operacion.erase(std::remove(operacion.begin(), operacion.end(), '\n'), operacion.end());
-		LOG_INFO(operacion);
+		LOG_INFO("Operacion: " +  operacion);
 		archivo.erase(std::remove(archivo.begin(), archivo.end(), '\n'), archivo.end());
-		LOG_INFO(archivo);
+		LOG_INFO("Archivo: " + archivo);
 		
-		if (!operacion.empty() && archivo != "") {
-			arguments.push_back(operacion);
-			arguments.push_back(archivo);
-			int returnValue = processImage(arguments, face_model);
-			if (returnValue != 0) {
-				LOG_ERROR("ERROR: Could not process image");
-			} else {
-				LOG_INFO("INFO: Image processed");
+		try {
+			if (!operacion.empty() && archivo != "") {
+				arguments.push_back(operacion);
+				arguments.push_back(archivo);
+				int returnValue = processImage(arguments, face_model);
+				if (returnValue != 0) {
+					LOG_ERROR("ERROR: Could not process image");
+				} else {
+					LOG_INFO("INFO: Image processed");
+				}
+				arguments.clear();
 			}
-			arguments.clear();
+		} catch  (const std::exception& e) {
+			LOG_ERROR(e.what());
 		}
 
 		// Se libera la memoria compartida
-		*shared_memory_addr = '\0';
+		memset((shared_memory_addr->operacion), 0, sizeof((shared_memory_addr->operacion)));
+		memset((shared_memory_addr->archivo), 0, sizeof((shared_memory_addr->archivo)));
+				
+		// datos_solicitud = new procesar_solicitud;
+		// memcpy(shared_memory_addr, datos_solicitud, sizeof(struct procesar_solicitud));
+		memset(shared_memory_addr, 0, sizeof(struct procesar_solicitud));
     	shmdt(shared_memory_addr);
         LOG_DEBUG("Count: ", count++);
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -208,10 +237,11 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 	// 	std::cout << "WARNING: no Action Unit models found" << std::endl;
 	// }
 
+	key_t key = ftok("/tmp/queue_test", 'a');
+	int queue_id = msgget(key, 0666 | IPC_CREAT);
 	std::cout << "Starting tracking" << std::endl;
 	while (!rgb_image.empty())
 	{
-	
 		Utilities::RecorderOpenFaceParameters recording_params(arguments, false, false,
 			image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
@@ -232,7 +262,6 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 
 		std::vector<float> confidences;
 		LandmarkDetector::DetectFacesMTCNN(face_detections, rgb_image, face_detector_mtcnn, confidences);
-			
 
 		// Detect landmarks around detected faces
 		int face_det = 0;
@@ -246,6 +275,7 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 			// Estimate head pose and eye gaze				
 			cv::Vec6d pose_estimate = LandmarkDetector::GetPose(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
+			
 			// std::cout << " ================ " << image_reader.name << " ================ " << std::endl;
 			std::cout << std::setprecision(3);
 			// std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
@@ -273,23 +303,28 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 
 			recorder_pre_detection.SetObservationFaceAlign(sim_warped_img);
 			recorder_pre_detection.WriteFaceAlign();
+			
+			face_data datos;
+			datos.pitch = radianToDegrees(pose_estimate[3]);
+			datos.yaw = radianToDegrees(pose_estimate[4]);
+			datos.roll = radianToDegrees(pose_estimate[5]);
+			// datos->image_name = image_reader.name;
+			datos.detection_certainty = face_model.detection_certainty;
+			msgsnd(queue_id, &datos, sizeof(datos), 0);
+
 			recorder_pre_detection.Close();
 		}
 		if (face_detections.size() > 0)
 		{
 			visualizer.ShowObservation();
 		}
-
-		// open_face_rec.SetObservationVisualization(visualizer.GetVisImage());
-		// open_face_rec.WriteObservationTracked();
-
-		// open_face_rec.Close();
-
-		// Grabbing the next frame in the sequence
+		// Se obtiene la próxima imagen
 		rgb_image = image_reader.GetNextImage();
-
 	}
-
+	// Se le avisa al proceso lector que ya no hay más imágenes.	
+	face_data datos;
+	datos.fin = true;
+	msgsnd(queue_id, &datos, sizeof(face_data), 0);
 	return 0;
 }
 
