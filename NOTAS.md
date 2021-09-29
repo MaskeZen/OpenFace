@@ -9,7 +9,7 @@
 Ejemplos
 
 **FacePreDetectionImg**
-`./build/bin/FacePreDetectionImg -fdir /home/maske/repo/work/ituy/mediapipe/img/faces/set04`
+`./build/bin/FacePreDetectionImg -fdir /home/maske/repo/work/ituy/mediapipe/img/faces/set04/yaw_c.jpg`
 
 **FeatureExtraction**
 `./build/bin/FeatureExtraction -verbose -pose -device /dev/video1`

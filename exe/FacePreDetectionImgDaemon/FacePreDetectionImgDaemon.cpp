@@ -70,12 +70,15 @@
 #define CONFIG_DIR "~"
 #endif
 
+const int IMG_WIDTH = 512;
+const int IMG_HEIGHT = 512;
+const int IMG_CHANNELS = 3;
+const int IMG_SIZE = IMG_WIDTH * IMG_HEIGHT * IMG_CHANNELS;
+const int IMG_SHM_KEY = 411367;
+
 std::vector<std::string> get_arguments(int argc, char **argv);
-
 float radianToDegrees(float radian);
-
-int processImage(std::vector<std::string>, LandmarkDetector::CLNF);
-
+int processImage(cv::Mat imagen, LandmarkDetector::CLNF);
 LandmarkDetector::CLNF face_model;
 LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn;
 Utilities::Visualizer visualizer;
@@ -84,22 +87,16 @@ FaceAnalysis::FaceAnalyser face_analyser;
 
 void reload();
 
-struct procesar_solicitud 
+struct datos_imagen
 {
-    char operacion[64];
-    char archivo[255];
-};
-
-struct face_data {
-	long mesg_type = 1;
+    int msg_id;
+    int msg_reply;
+    int status;
     float yaw;
     float pitch;
     float roll;
 	float detection_certainty;
-	// std::string image_name;
-	bool fin = false;
-    // char* image;
-    // cv::Mat rgb_image;
+    unsigned char imagen[IMG_SIZE];
 };
 
 int main(int argc, char **argv)
@@ -116,11 +113,11 @@ int main(int argc, char **argv)
 
 	if (!face_model.loaded_successfully)
 	{
-		std::cout << "ERROR: Could not load the landmark detector" << std::endl;
+		std::cout << "ERROR: No se pudo cargar el landmark detector" << std::endl;
 		return 1;
 	}
 
-	std::cout << "Model loaded" << std::endl;
+	std::cout << "Model cargado" << std::endl;
 
 	// Load facial feature extractor and AU analyser (make sure it is static)
 	FaceAnalysis::FaceAnalyserParameters face_analysis_params(arguments);
@@ -145,60 +142,39 @@ int main(int argc, char **argv)
 	Daemon& daemon = Daemon::instance();
     // señal SIGHUP
     daemon.setReloadFunction(reload);
-	int count = 0;
 
-	// se genera una clave única
-    // key_t key = ftok("shmfile",65);
-	key_t key = 411360;
-    // identificador del espacio de memoria
-    int shmid = shmget(key, sizeof(struct procesar_solicitud),0666|IPC_CREAT);
-	struct procesar_solicitud* datos_solicitud;
+	int count = 0;
+	int shmid = shmget(IMG_SHM_KEY, sizeof(datos_imagen),0666|IPC_CREAT);
+
+	int last_msg_id = 0;
     while (daemon.IsRunning()) {
 		// Se lee de la memoria compartida
-		procesar_solicitud* shared_memory_addr = (procesar_solicitud*) shmat(shmid,(void*)0,0);
-		if (shared_memory_addr == (void*)-1) {
-			std::cout << "ERROR: Could not attach to shared memory" << std::endl;
+		datos_imagen *datos = (datos_imagen*) shmat(shmid,(void*)0,0);
+		if (datos == (void*)-1) {
+			std::cout << "ERROR: No se pudo obtener la memoria compartida." << std::endl;
 		 	return 1;
 		}
-		// if (*shared_memory_addr == (char*)-1) {
-		// 	std::cout << "ERROR: Could not attach to shared memory" << std::endl;
-		// 	return 1;
-		// }
-		
-		// datos_solicitud = new procesar_solicitud;
-		// memcpy(datos_solicitud, shared_memory_addr, sizeof(struct procesar_solicitud));
+
+		if (datos->msg_id > last_msg_id) {
+			last_msg_id = datos->msg_id;
+			// Se lee la imagen
+			cv::Mat imagen = cv::Mat(IMG_HEIGHT, IMG_WIDTH, CV_8UC3, &(datos->imagen[0]));
+			
+			try {
 				
-		std::string operacion(shared_memory_addr->operacion);
-		std::string archivo(shared_memory_addr->archivo);
-		operacion.erase(std::remove(operacion.begin(), operacion.end(), '\n'), operacion.end());
-		LOG_INFO("Operacion: " +  operacion);
-		archivo.erase(std::remove(archivo.begin(), archivo.end(), '\n'), archivo.end());
-		LOG_INFO("Archivo: " + archivo);
-		
-		try {
-			if (!operacion.empty() && archivo != "") {
-				arguments.push_back(operacion);
-				arguments.push_back(archivo);
-				int returnValue = processImage(arguments, face_model);
+				int returnValue = processImage(imagen, face_model);
 				if (returnValue != 0) {
 					LOG_ERROR("ERROR: Could not process image");
 				} else {
 					LOG_INFO("INFO: Image processed");
 				}
-				arguments.clear();
-			}
-		} catch  (const std::exception& e) {
-			LOG_ERROR(e.what());
-		}
-
-		// Se libera la memoria compartida
-		memset((shared_memory_addr->operacion), 0, sizeof((shared_memory_addr->operacion)));
-		memset((shared_memory_addr->archivo), 0, sizeof((shared_memory_addr->archivo)));
 				
-		// datos_solicitud = new procesar_solicitud;
-		// memcpy(shared_memory_addr, datos_solicitud, sizeof(struct procesar_solicitud));
-		memset(shared_memory_addr, 0, sizeof(struct procesar_solicitud));
-    	shmdt(shared_memory_addr);
+			} catch  (const std::exception& e) {
+				LOG_ERROR(e.what());
+			}
+		}
+		
+		shmdt(datos);
         LOG_DEBUG("Count: ", count++);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
@@ -212,34 +188,17 @@ float radianToDegrees(float radian) {
 	return radian * (180.0f / 3.14159265f);
 }
 
-int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face_model) {
+int processImage(cv::Mat rgb_image, LandmarkDetector::CLNF face_model) {
+	std::vector<std::string> arguments;
 	// Prepare for image reading
 	Utilities::ImageCapture image_reader;
-
-	// The sequence reader chooses what to open based on command line arguments provided
-	if (!image_reader.Open(arguments))
-	{
-		std::cout << "Could not open any images" << std::endl;
-		return 1;
-	}
-
-	cv::Mat rgb_image;
-
-	rgb_image = image_reader.GetNextImage();
-	
-	if (!face_model.eye_model)
-	{
-		std::cout << "WARNING: no eye model found" << std::endl;
-	}
-
-	// if (face_analyser.GetAUClassNames().size() == 0 && face_analyser.GetAUClassNames().size() == 0)
-	// {
-	// 	std::cout << "WARNING: no Action Unit models found" << std::endl;
-	// }
 
 	key_t key = ftok("/tmp/queue_test", 'a');
 	int queue_id = msgget(key, 0666 | IPC_CREAT);
 	std::cout << "Starting tracking" << std::endl;
+    
+	cv::imshow("imagen", rgb_image);
+    cv::waitKey(0);
 	while (!rgb_image.empty())
 	{
 		Utilities::RecorderOpenFaceParameters recording_params(arguments, false, false,
@@ -304,7 +263,7 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 			recorder_pre_detection.SetObservationFaceAlign(sim_warped_img);
 			recorder_pre_detection.WriteFaceAlign();
 			
-			face_data datos;
+			datos_imagen datos;
 			datos.pitch = radianToDegrees(pose_estimate[3]);
 			datos.yaw = radianToDegrees(pose_estimate[4]);
 			datos.roll = radianToDegrees(pose_estimate[5]);
@@ -322,9 +281,8 @@ int processImage(std::vector<std::string> arguments, LandmarkDetector::CLNF face
 		rgb_image = image_reader.GetNextImage();
 	}
 	// Se le avisa al proceso lector que ya no hay más imágenes.	
-	face_data datos;
-	datos.fin = true;
-	msgsnd(queue_id, &datos, sizeof(face_data), 0);
+	// datos_imagen datos;
+	// msgsnd(queue_id, &datos, sizeof(datos_imagen), 0);
 	return 0;
 }
 
