@@ -1,4 +1,5 @@
 SET(SOURCE
+    src/FacePreDetectionImageCapture.cpp
     src/ImageCapture.cpp
 	src/RecorderCSV.cpp
     src/RecorderHOG.cpp
@@ -12,6 +13,7 @@ SET(SOURCE
 )
 
 SET(HEADERS
+    include/FacePreDetectionImageCapture.h	
     include/ImageCapture.h	
     include/RecorderCSV.h
 	include/RecorderHOG.h

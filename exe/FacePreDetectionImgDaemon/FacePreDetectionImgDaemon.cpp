@@ -41,7 +41,7 @@
 #include <FaceAnalyser.h>
 #include <GazeEstimation.h>
 
-#include <ImageCapture.h>
+#include <FacePreDetectionImageCapture.h>
 #include <Visualizer.h>
 #include <VisualizationUtils.h>
 #include <RecorderOpenFace.h>
@@ -78,7 +78,7 @@ const int IMG_SHM_KEY = 411367;
 
 std::vector<std::string> get_arguments(int argc, char **argv);
 float radianToDegrees(float radian);
-int processImage(cv::Mat imagen, LandmarkDetector::CLNF);
+int processImage(cv::Mat imagen, std::string, LandmarkDetector::CLNF);
 LandmarkDetector::CLNF face_model;
 LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn;
 Utilities::Visualizer visualizer;
@@ -161,8 +161,8 @@ int main(int argc, char **argv)
 			cv::Mat imagen = cv::Mat(IMG_HEIGHT, IMG_WIDTH, CV_8UC3, &(datos->imagen[0]));
 			
 			try {
-				
-				int returnValue = processImage(imagen, face_model);
+				std::string msg_id = std::to_string(datos->msg_id);
+				int returnValue = processImage(imagen, msg_id, face_model);
 				if (returnValue != 0) {
 					LOG_ERROR("ERROR: Could not process image");
 				} else {
@@ -176,7 +176,7 @@ int main(int argc, char **argv)
 		
 		shmdt(datos);
         LOG_DEBUG("Count: ", count++);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     // Se destruye la memoria compartida
     shmctl(shmid,IPC_RMID,NULL);
@@ -188,18 +188,14 @@ float radianToDegrees(float radian) {
 	return radian * (180.0f / 3.14159265f);
 }
 
-int processImage(cv::Mat rgb_image, LandmarkDetector::CLNF face_model) {
+int processImage(cv::Mat rgb_image, std::string msg_id, LandmarkDetector::CLNF face_model) {
 	std::vector<std::string> arguments;
 	// Prepare for image reading
-	Utilities::ImageCapture image_reader;
-
-	key_t key = ftok("/tmp/queue_test", 'a');
-	int queue_id = msgget(key, 0666 | IPC_CREAT);
-	std::cout << "Starting tracking" << std::endl;
-    
-	cv::imshow("imagen", rgb_image);
-    cv::waitKey(0);
-	while (!rgb_image.empty())
+	Utilities::FacePreDetectionImageCapture image_reader;
+	std::cout << "Se intenta inicializar la imagen" << std::endl;
+	// cv::imshow("imagen", rgb_image);
+    // cv::waitKey(0);
+	if (image_reader.Init(rgb_image, msg_id))
 	{
 		Utilities::RecorderOpenFaceParameters recording_params(arguments, false, false,
 			image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
@@ -238,11 +234,7 @@ int processImage(cv::Mat rgb_image, LandmarkDetector::CLNF face_model) {
 			// std::cout << " ================ " << image_reader.name << " ================ " << std::endl;
 			std::cout << std::setprecision(3);
 			// std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
-			std::cout << image_reader.name << face_model.detection_certainty << "," << radianToDegrees(pose_estimate[3]) << "," << radianToDegrees(pose_estimate[4]) << "," << radianToDegrees(pose_estimate[5]) << std::endl;
-
-			// std::cout << "SE IMPRIME POSE ESTIMATE" << std::endl;
-			// std::cout << pose_estimate[0] << "|" << pose_estimate[1] << "|" << pose_estimate[2] << std::endl;
-			// std::cout << "Pitch, Yaw y Roll" << std::endl;
+			std::cout << image_reader.name << ", " << face_model.detection_certainty << ", " << radianToDegrees(pose_estimate[3]) << ", " << radianToDegrees(pose_estimate[4]) << ", " << radianToDegrees(pose_estimate[5]) << std::endl;
 
 			// int yaw = (int)(pose_estimate[4] * 180 / 3.1415926 + 0.5);
             // int roll = (int)(pose_estimate[5] * 180 / 3.1415926 + 0.5);
@@ -269,7 +261,7 @@ int processImage(cv::Mat rgb_image, LandmarkDetector::CLNF face_model) {
 			datos.roll = radianToDegrees(pose_estimate[5]);
 			// datos->image_name = image_reader.name;
 			datos.detection_certainty = face_model.detection_certainty;
-			msgsnd(queue_id, &datos, sizeof(datos), 0);
+			// msgsnd(queue_id, &datos, sizeof(datos), 0);
 
 			recorder_pre_detection.Close();
 		}
@@ -277,12 +269,7 @@ int processImage(cv::Mat rgb_image, LandmarkDetector::CLNF face_model) {
 		{
 			visualizer.ShowObservation();
 		}
-		// Se obtiene la próxima imagen
-		rgb_image = image_reader.GetNextImage();
 	}
-	// Se le avisa al proceso lector que ya no hay más imágenes.	
-	// datos_imagen datos;
-	// msgsnd(queue_id, &datos, sizeof(datos_imagen), 0);
 	return 0;
 }
 
