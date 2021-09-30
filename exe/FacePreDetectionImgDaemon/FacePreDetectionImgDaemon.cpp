@@ -75,17 +75,7 @@ const int IMG_HEIGHT = 512;
 const int IMG_CHANNELS = 3;
 const int IMG_SIZE = IMG_WIDTH * IMG_HEIGHT * IMG_CHANNELS;
 const int IMG_SHM_KEY = 411367;
-
-std::vector<std::string> get_arguments(int argc, char **argv);
-float radianToDegrees(float radian);
-int processImage(cv::Mat imagen, std::string, LandmarkDetector::CLNF);
-LandmarkDetector::CLNF face_model;
-LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn;
-Utilities::Visualizer visualizer;
-LandmarkDetector::FaceModelParameters det_parameters;
-FaceAnalysis::FaceAnalyser face_analyser;
-
-void reload();
+int last_msg_id = 0;
 
 struct datos_imagen
 {
@@ -98,6 +88,19 @@ struct datos_imagen
 	float detection_certainty;
     unsigned char imagen[IMG_SIZE];
 };
+
+std::vector<std::string> get_arguments(int argc, char **argv);
+float radianToDegrees(float radian);
+int processImage(datos_imagen*, LandmarkDetector::CLNF);
+LandmarkDetector::CLNF face_model;
+LandmarkDetector::FaceDetectorMTCNN face_detector_mtcnn;
+Utilities::Visualizer visualizer;
+LandmarkDetector::FaceModelParameters det_parameters;
+FaceAnalysis::FaceAnalyser face_analyser;
+
+void reload();
+
+
 
 int main(int argc, char **argv)
 {
@@ -146,7 +149,7 @@ int main(int argc, char **argv)
 	int count = 0;
 	int shmid = shmget(IMG_SHM_KEY, sizeof(datos_imagen),0666|IPC_CREAT);
 
-	int last_msg_id = 0;
+	LOG_INFO(" --- SE INICIA ESCUCHA --- ");
     while (daemon.IsRunning()) {
 		// Se lee de la memoria compartida
 		datos_imagen *datos = (datos_imagen*) shmat(shmid,(void*)0,0);
@@ -155,14 +158,10 @@ int main(int argc, char **argv)
 		 	return 1;
 		}
 
-		if (datos->msg_id > last_msg_id) {
+		if (datos->msg_reply == 0 && datos->msg_id > last_msg_id) {
 			last_msg_id = datos->msg_id;
-			// Se lee la imagen
-			cv::Mat imagen = cv::Mat(IMG_HEIGHT, IMG_WIDTH, CV_8UC3, &(datos->imagen[0]));
-			
 			try {
-				std::string msg_id = std::to_string(datos->msg_id);
-				int returnValue = processImage(imagen, msg_id, face_model);
+				int returnValue = processImage(datos, face_model);
 				if (returnValue != 0) {
 					LOG_ERROR("ERROR: Could not process image");
 				} else {
@@ -172,11 +171,16 @@ int main(int argc, char **argv)
 			} catch  (const std::exception& e) {
 				LOG_ERROR(e.what());
 			}
+		} else {
+			LOG_INFO("INFO: No hay nuevos mensajes");
+			LOG_INFO("INFO: Mensaje anterior: " + std::to_string(last_msg_id));
+			LOG_INFO("INFO: Mensaje actual: " + std::to_string(datos->msg_id));
+			LOG_INFO("INFO: Mensaje reply: " + std::to_string(datos->msg_reply));
 		}
 		
 		shmdt(datos);
         LOG_DEBUG("Count: ", count++);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
     }
     // Se destruye la memoria compartida
     shmctl(shmid,IPC_RMID,NULL);
@@ -188,11 +192,13 @@ float radianToDegrees(float radian) {
 	return radian * (180.0f / 3.14159265f);
 }
 
-int processImage(cv::Mat rgb_image, std::string msg_id, LandmarkDetector::CLNF face_model) {
+int processImage(datos_imagen *datos, LandmarkDetector::CLNF face_model) {
 	std::vector<std::string> arguments;
 	// Prepare for image reading
 	Utilities::FacePreDetectionImageCapture image_reader;
 	std::cout << "Se intenta inicializar la imagen" << std::endl;
+	cv::Mat rgb_image = cv::Mat(IMG_HEIGHT, IMG_WIDTH, CV_8UC3, &(datos->imagen[0]));
+	std::string msg_id = std::to_string(datos->msg_id);
 	// cv::imshow("imagen", rgb_image);
     // cv::waitKey(0);
 	if (image_reader.Init(rgb_image, msg_id))
@@ -230,15 +236,24 @@ int processImage(cv::Mat rgb_image, std::string msg_id, LandmarkDetector::CLNF f
 			// Estimate head pose and eye gaze				
 			cv::Vec6d pose_estimate = LandmarkDetector::GetPose(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
+			datos->pitch = radianToDegrees(pose_estimate[3]);
+			datos->yaw = radianToDegrees(pose_estimate[4]);
+			datos->roll = radianToDegrees(pose_estimate[5]);
+			datos->detection_certainty = face_model.detection_certainty;
+			int msg_reply = datos->msg_reply == 0 ? datos->msg_id : datos->msg_reply;
+			const auto p1 = std::chrono::system_clock::now();
+    		datos->msg_id =  std::chrono::duration_cast<std::chrono::milliseconds>(
+                   p1.time_since_epoch()).count();
+			datos->msg_reply = msg_reply;
 			
 			// std::cout << " ================ " << image_reader.name << " ================ " << std::endl;
 			std::cout << std::setprecision(3);
 			// std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
 			std::cout << image_reader.name << ", " << face_model.detection_certainty << ", " << radianToDegrees(pose_estimate[3]) << ", " << radianToDegrees(pose_estimate[4]) << ", " << radianToDegrees(pose_estimate[5]) << std::endl;
 
+			// int pitch = (int)(pose_estimate[3] * 180 /3.1415926 + 0.5);
 			// int yaw = (int)(pose_estimate[4] * 180 / 3.1415926 + 0.5);
             // int roll = (int)(pose_estimate[5] * 180 / 3.1415926 + 0.5);
-			// int pitch = (int)(pose_estimate[3] * 180 /3.1415926 + 0.5);
 			// std::cout<<"pitch:\t"<<"yaw:\t"<<"roll:"<< std::endl;
 			// std::cout<<pitch<<"\t"<<yaw<<"\t"<<roll<< std::endl;
 
@@ -254,14 +269,6 @@ int processImage(cv::Mat rgb_image, std::string msg_id, LandmarkDetector::CLNF f
 
 			recorder_pre_detection.SetObservationFaceAlign(sim_warped_img);
 			recorder_pre_detection.WriteFaceAlign();
-			
-			datos_imagen datos;
-			datos.pitch = radianToDegrees(pose_estimate[3]);
-			datos.yaw = radianToDegrees(pose_estimate[4]);
-			datos.roll = radianToDegrees(pose_estimate[5]);
-			// datos->image_name = image_reader.name;
-			datos.detection_certainty = face_model.detection_certainty;
-			// msgsnd(queue_id, &datos, sizeof(datos), 0);
 
 			recorder_pre_detection.Close();
 		}
