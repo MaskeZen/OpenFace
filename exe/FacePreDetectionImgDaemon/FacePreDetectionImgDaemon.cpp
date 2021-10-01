@@ -77,6 +77,12 @@ const int IMG_SIZE = IMG_WIDTH * IMG_HEIGHT * IMG_CHANNELS;
 const int IMG_SHM_KEY = 411367;
 int last_msg_id = 0;
 
+const int IMG_OUT_WIDTH = 112;
+const int IMG_OUT_HEIGHT = 112;
+const int IMG_OUT_CHANNELS = 3;
+const int IMG_OUT_SIZE = IMG_OUT_WIDTH * IMG_OUT_HEIGHT * IMG_OUT_CHANNELS;
+
+
 struct datos_imagen
 {
     int msg_id;
@@ -176,6 +182,11 @@ int main(int argc, char **argv)
 			LOG_INFO("INFO: Mensaje anterior: " + std::to_string(last_msg_id));
 			LOG_INFO("INFO: Mensaje actual: " + std::to_string(datos->msg_id));
 			LOG_INFO("INFO: Mensaje reply: " + std::to_string(datos->msg_reply));
+			// if (datos->msg_reply > 0) {
+			// 	cv::Mat img_reply = cv::Mat(IMG_OUT_HEIGHT, IMG_OUT_WIDTH, CV_8UC3, &(datos->imagen[0]));
+			// 	cv::imshow("img_reply", img_reply);
+			// 	cv::waitKey(0);
+			// }
 		}
 		
 		shmdt(datos);
@@ -229,46 +240,26 @@ int processImage(datos_imagen *datos, LandmarkDetector::CLNF face_model) {
 		// perform landmark detection for every face detected
 		for (size_t face = 0; face < face_detections.size(); ++face)
 		{
-
 			// if there are multiple detections go through them
 			bool success = LandmarkDetector::DetectLandmarksInImage(rgb_image, face_detections[face], face_model, det_parameters, grayscale_image);
-
 			// Estimate head pose and eye gaze				
 			cv::Vec6d pose_estimate = LandmarkDetector::GetPose(face_model, image_reader.fx, image_reader.fy, image_reader.cx, image_reader.cy);
 
 			datos->pitch = radianToDegrees(pose_estimate[3]);
 			datos->yaw = radianToDegrees(pose_estimate[4]);
 			datos->roll = radianToDegrees(pose_estimate[5]);
-			datos->detection_certainty = face_model.detection_certainty;
+			datos->detection_certainty = face_model.detection_certainty;			
+			
+			cv::Mat sim_warped_img;
+			face_analyser.PredictStaticAUsAndComputeFeatures(rgb_image, face_model.detected_landmarks);
+			face_analyser.GetLatestAlignedFace(sim_warped_img);
+			memcpy(datos->imagen, sim_warped_img.data, IMG_OUT_SIZE);
+
 			int msg_reply = datos->msg_reply == 0 ? datos->msg_id : datos->msg_reply;
 			const auto p1 = std::chrono::system_clock::now();
     		datos->msg_id =  std::chrono::duration_cast<std::chrono::milliseconds>(
                    p1.time_since_epoch()).count();
 			datos->msg_reply = msg_reply;
-			
-			// std::cout << " ================ " << image_reader.name << " ================ " << std::endl;
-			std::cout << std::setprecision(3);
-			// std::cout << "Confidence: " << face_model.detection_certainty << std::endl;;
-			std::cout << image_reader.name << ", " << face_model.detection_certainty << ", " << radianToDegrees(pose_estimate[3]) << ", " << radianToDegrees(pose_estimate[4]) << ", " << radianToDegrees(pose_estimate[5]) << std::endl;
-
-			// int pitch = (int)(pose_estimate[3] * 180 /3.1415926 + 0.5);
-			// int yaw = (int)(pose_estimate[4] * 180 / 3.1415926 + 0.5);
-            // int roll = (int)(pose_estimate[5] * 180 / 3.1415926 + 0.5);
-			// std::cout<<"pitch:\t"<<"yaw:\t"<<"roll:"<< std::endl;
-			// std::cout<<pitch<<"\t"<<yaw<<"\t"<<roll<< std::endl;
-
-			// std::cout << std::setprecision(3);
-			// std::cout << radianToDegrees(pose_estimate[3]) << "," << radianToDegrees(pose_estimate[4]) << "," << radianToDegrees(pose_estimate[5]) << std::endl;
-
-			cv::Mat sim_warped_img;
-
-			face_analyser.PredictStaticAUsAndComputeFeatures(rgb_image, face_model.detected_landmarks);
-			face_analyser.GetLatestAlignedFace(sim_warped_img);
-
-			visualizer.SetObservationFaceAlign(sim_warped_img);
-
-			recorder_pre_detection.SetObservationFaceAlign(sim_warped_img);
-			recorder_pre_detection.WriteFaceAlign();
 
 			recorder_pre_detection.Close();
 		}
